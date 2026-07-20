@@ -28,14 +28,16 @@ npx tree-sitter parse path/to/file.gos
 
 ## Status
 
-Tracks Gossamer 0.12.0: `arena { }` blocks, `let ... else`,
-`if let` / `while let`, both closure forms (`|x| body` and
-`fn(x) { }`), the format macros plus `vec![...]`, `?` propagation,
-`as` casts, turbofish calls (`from_json::<T>(...)`), closure trait
-types (`Fn(i64) -> i64`), variant-level attributes (`#[default]`),
-and UAX #31 Unicode identifiers. Nested block comments are lexed by
-the external scanner in `src/scanner.c` (compile it alongside
-`src/parser.c`).
+Tracks Gossamer 0.32.0: `arena { }` blocks, `comptime` blocks and
+functions, `let ... else`, `if let` / `while let` chains, labels, open
+ranges, slice patterns, both closure forms (`|x| body` and
+`fn(x) { }`), the built-in macro forms, `?` propagation, `as` casts,
+turbofish calls (`from_json::<T>(...)`), const-generic literal
+arguments, closure trait types (`Fn(i64) -> i64`), braced named-struct
+literals with keyed and positional fields, variant-level attributes
+(`#[default]`), and UAX #31 Unicode identifiers. Nested block comments
+are lexed by the external scanner in `src/scanner.c` (compile it
+alongside `src/parser.c`).
 
 Every example and feature-test file in the Gossamer repository parses
 without ERROR nodes; `test/corpus/` locks the tree shapes

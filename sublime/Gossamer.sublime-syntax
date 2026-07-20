@@ -90,7 +90,7 @@ contexts:
       scope: keyword.control.gossamer
     - match: '\b(if|else|match|loop|while|for|in|break|continue|return|yield|defer|select|go)\b'
       scope: keyword.control.gossamer
-    - match: '\b(as|async|await|const|crate|dyn|enum|extern|fn|impl|let|mod|mut|package|pub|self|Self|static|struct|super|trait|type|unsafe|use|where)\b'
+    - match: '\b(as|async|await|comptime|const|crate|dyn|enum|extern|fn|impl|let|mod|mut|package|pub|self|Self|static|struct|super|trait|type|unsafe|use|where|yield)\b'
       scope: keyword.other.gossamer
     - match: '\b{{ident}}!'
       scope: entity.name.function.macro.gossamer
@@ -110,9 +110,9 @@ contexts:
   operators:
     - match: '\|>'
       scope: keyword.operator.pipe.gossamer
-    - match: '(==|!=|<=|>=|&&|\|\||<<|>>|\+=|-=|\*=|/=|%=|&=|\|=|\^=|->|=>|\.\.=|\.\.|::)'
+    - match: '(==|!=|<=|>=|&&|\|\||<<=|>>=|<<|>>|\+=|-=|\*=|/=|%=|&=|\|=|\^=|->|=>|\.\.\.|\.\.=|\.\.|::)'
       scope: keyword.operator.gossamer
-    - match: '[+\-*/%<>!~|&^?.=]'
+    - match: '[+\-*/%<>!~|&^?.=@]'
       scope: keyword.operator.gossamer
 
   functions:

@@ -29,9 +29,9 @@
   "Syntax table for `gossamer-mode'.")
 
 (defconst gossamer-keywords
-  '("as" "async" "await" "const" "crate" "dyn" "enum" "extern" "fn"
+  '("as" "async" "await" "comptime" "const" "crate" "dyn" "enum" "extern" "fn"
     "impl" "let" "mod" "mut" "package" "pub" "self" "Self" "static"
-    "struct" "super" "trait" "type" "unsafe" "use" "where"))
+    "struct" "super" "trait" "type" "unsafe" "use" "where" "yield"))
 
 (defconst gossamer-control
   '("if" "else" "match" "loop" "while" "for" "in" "break" "continue"

@@ -9,9 +9,9 @@ endif
 
 syntax case match
 
-syntax keyword gossamerKeyword as async await const crate dyn enum extern fn
+syntax keyword gossamerKeyword as async await comptime const crate dyn enum extern fn
 syntax keyword gossamerKeyword impl let mod mut package pub self Self static
-syntax keyword gossamerKeyword struct super trait type unsafe use where
+syntax keyword gossamerKeyword struct super trait type unsafe use where yield
 syntax keyword gossamerControl if else match loop while for in break continue
 syntax keyword gossamerControl return yield defer select go
 " `arena` is contextual: a keyword only when it opens a block.
@@ -46,7 +46,12 @@ syntax region gossamerBlockComment start="/\*" end="\*/" contains=gossamerBlockC
 syntax keyword gossamerTodo TODO FIXME XXX NOTE contained
 
 syntax match gossamerOperator "|>"
-syntax match gossamerOperator "[+\-*/%=<>!&|^~?]"
+syntax match gossamerOperator "\.\.\."
+syntax match gossamerOperator "<<="
+syntax match gossamerOperator ">>="
+syntax match gossamerOperator "\.\.="
+syntax match gossamerOperator "\.\."
+syntax match gossamerOperator "[+\-*/%=<>!&|^~?@]"
 syntax match gossamerOperator "->"
 syntax match gossamerOperator "=>"
 syntax match gossamerOperator "::"

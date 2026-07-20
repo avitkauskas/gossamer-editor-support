@@ -11,9 +11,11 @@
 (boolean_literal) @constant.builtin.boolean
 (string_literal) @string
 (raw_string_literal) @string
+(raw_byte_string_literal) @string
 (byte_string_literal) @string
+(byte_literal) @string.special
 (char_literal) @string
-(escape_sequence) @string.escape
+(label) @label
 
 ; Catch-all identifiers (specific cases override these below)
 (identifier) @variable
@@ -24,7 +26,7 @@
 ((type_identifier) @type.builtin
   (#match? @type.builtin "^(Arc|Array|BTreeMap|BTreeSet|Box|Fn|FnMut|FnOnce|HashMap|HashSet|JoinHandle|Mutex|Option|Rc|Receiver|Result|RwLock|Sender|String|Vec|Weak)$"))
 
-; Built-in constructors (Some/None/Ok/Err live as paths/identifiers — match by name)
+; Built-in constructors (Some/None/Ok/Err live as paths/identifiers, match by name)
 ((identifier) @constant.builtin
   (#match? @constant.builtin "^(Some|None|Ok|Err)$"))
 
@@ -34,8 +36,9 @@
 (generic_function function: (identifier) @function)
 (method_call_expression (identifier) @function.method)
 
-; Macros (`println!`, `vec!`, ...)
+; Built-in macros (`println!`, `matches!`, `regex!`, ...)
 (macro_invocation macro: (identifier) @function.macro)
+(spread_argument) @operator
 
 ; Fields
 (field_expression (identifier) @variable.field .)
@@ -97,7 +100,10 @@
 [
   "as"
   "async"
+  "await"
+  "comptime"
   "const"
+  "crate"
   "dyn"
   "enum"
   "extern"
@@ -106,15 +112,19 @@
   "let"
   "mod"
   "mut"
+  "package"
   "pub"
   "self"
+  "Self"
   "static"
   "struct"
+  "super"
   "trait"
   "type"
   "unsafe"
   "use"
   "where"
+  "yield"
 ] @keyword
 
 [
@@ -131,10 +141,10 @@
   "select"
   "go"
   "arena"
+  "continue"
 ] @keyword.control
 
-; `continue_expression` is a bare-literal rule, so the "continue" token isn't
-; exposed as an anonymous node — match the named node instead.
+(reserved_keyword) @keyword
 (continue_expression) @keyword.control
 
 ; Attributes

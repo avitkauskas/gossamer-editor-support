@@ -9,9 +9,11 @@
 (boolean_literal) @boolean
 (string_literal) @string
 (raw_string_literal) @string
+(raw_byte_string_literal) @string
 (byte_string_literal) @string
+(byte_literal) @string.special
 (char_literal) @string.special
-(escape_sequence) @string.escape
+(label) @label
 
 ((identifier) @constant
   (#match? @constant "^(Some|None|Ok|Err)$"))
@@ -36,15 +38,15 @@
 ; Only tokens the grammar actually defines may appear here; an unknown
 ; token makes the whole query fail to load.
 [
-  "as" "async" "const" "dyn" "enum" "extern" "fn"
-  "impl" "let" "mod" "mut" "pub" "self" "static" "struct"
-  "trait" "type" "unsafe" "use" "where"
+  "as" "async" "await" "comptime" "const" "crate" "dyn" "enum"
+  "extern" "fn" "impl" "let" "mod" "mut" "package" "pub" "self"
+  "Self" "static" "struct" "super" "trait" "type" "unsafe" "use"
+  "where" "yield"
   "if" "else" "match" "loop" "while" "for" "in" "break"
-  "return" "defer" "select" "go" "arena"
+  "continue" "return" "defer" "select" "go" "arena"
 ] @keyword
 
-; `continue_expression` is a bare-literal rule; its token is not exposed
-; as an anonymous node, so match the named node instead.
+(reserved_keyword) @keyword
 (continue_expression) @keyword
 
 (attribute_item) @attribute

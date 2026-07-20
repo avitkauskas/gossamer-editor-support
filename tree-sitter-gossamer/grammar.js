@@ -2,7 +2,7 @@
  * tree-sitter-gossamer
  *
  * Grammar for the Gossamer programming language. Surface syntax is
- * Rust-flavoured with two simplifications: no lifetime annotations and
+ * Rust-flavoured with managed references, goroutines, comptime, and
  * optional semicolons at statement boundaries.
  */
 
@@ -19,9 +19,10 @@ const PREC = {
   comparative: 4,
   and: 3,
   or: 2,
-  pipe: 1,
-  assign: 0,
-  closure: -1,
+  range: 1,
+  pipe: 0,
+  assign: -1,
+  closure: -2,
 };
 
 const integer_types = [
@@ -45,7 +46,7 @@ module.exports = grammar({
   ],
 
   // Block comments nest (`/* a /* b */ c */` is one comment), which a
-  // single regex token cannot express — src/scanner.c lexes them.
+  // single regex token cannot express, so src/scanner.c lexes them.
   externals: $ => [
     $.block_comment,
   ],
@@ -60,12 +61,17 @@ module.exports = grammar({
     [$._expression, $.tuple_struct_pattern],
     [$.tuple_expression, $.tuple_pattern],
     [$.struct_expression, $.struct_pattern],
+    [$._item, $.associated_type_item, $.associated_const_item],
+    [$.slice_pattern, $.array_expression],
+    [$._path_segment, $.struct_pattern],
+    [$.type_item, $.associated_type_item],
+    [$.const_item, $.associated_const_item],
+    [$.tuple_field_declaration, $.tuple_type],
+    [$._expression, $._index_receiver],
   ],
 
   rules: {
-    // The entry file is implicitly `fn main`: bare statements may appear at
-    // file scope alongside items. `_statement` already includes `_item`, so
-    // this parses items and statements the same way a block body does.
+    // Entry files may contain bare statements alongside items.
     source_file: $ => repeat($._statement),
 
     _item: $ => choice(
@@ -93,8 +99,10 @@ module.exports = grammar({
     ),
 
     _token_tree: $ => repeat1(choice(
-      /[^\[\]]+/,
+      /[^\[\](){}]+/,
       seq("[", $._token_tree, "]"),
+      seq("(", $._token_tree, ")"),
+      seq("{", $._token_tree, "}"),
     )),
 
     use_declaration: $ => prec.right(seq(
@@ -105,7 +113,7 @@ module.exports = grammar({
     )),
 
     _use_path: $ => seq(
-      $.identifier,
+      $._path_segment,
       optional(choice(
         seq("::", "*"),
         seq("::", "{", commaSep($._use_path), "}"),
@@ -115,9 +123,16 @@ module.exports = grammar({
     ),
 
     _path: $ => seq(
-      $.identifier,
-      repeat(seq("::", $.identifier)),
+      $._path_segment_with_generics,
+      repeat(seq("::", $._path_segment_with_generics)),
     ),
+
+    _path_segment: $ => choice($.identifier, "self", "Self", "super", "crate"),
+
+    _path_segment_with_generics: $ => prec.right(seq(
+      $._path_segment,
+      optional(seq("::<", commaSep1($._generic_arg), ">")),
+    )),
 
     mod_item: $ => seq(
       optional("pub"),
@@ -137,9 +152,10 @@ module.exports = grammar({
     )),
 
     extern_item: $ => seq(
+      optional("unsafe"),
       "extern",
       optional($.string_literal),
-      $.declaration_block,
+      choice(";", $.block),
     ),
 
     const_item: $ => prec.right(seq(
@@ -170,11 +186,13 @@ module.exports = grammar({
       "struct",
       field("name", $.type_identifier),
       optional($.type_parameters),
+      optional(seq("where", commaSep1($.where_clause))),
       choice(
         seq("{", commaSep($.field_declaration), "}"),
-        seq("(", commaSep($._type), ")", optional(";")),
+        seq("(", commaSep($.tuple_field_declaration), ")", optional(";")),
         ";",
       ),
+      optional(seq("where", commaSep1($.where_clause))),
     )),
 
     enum_item: $ => seq(
@@ -182,6 +200,7 @@ module.exports = grammar({
       "enum",
       field("name", $.type_identifier),
       optional($.type_parameters),
+      optional(seq("where", commaSep1($.where_clause))),
       "{",
       commaSep($.enum_variant),
       "}",
@@ -191,15 +210,23 @@ module.exports = grammar({
       repeat($.attribute_item),
       field("name", $.type_identifier),
       optional(choice(
-        seq("(", commaSep($._type), ")"),
+        seq("(", commaSep($.tuple_field_declaration), ")"),
         seq("{", commaSep($.field_declaration), "}"),
       )),
+      optional(seq("=", $._expression)),
     ),
 
     field_declaration: $ => seq(
+      repeat($.attribute_item),
       optional("pub"),
       field("name", $.identifier),
       ":",
+      field("type", $._type),
+    ),
+
+    tuple_field_declaration: $ => seq(
+      repeat($.attribute_item),
+      optional("pub"),
       field("type", $._type),
     ),
 
@@ -209,6 +236,7 @@ module.exports = grammar({
       field("name", $.type_identifier),
       optional($.type_parameters),
       optional(seq(":", $._type, repeat(seq("+", $._type)))),
+      optional(seq("where", commaSep1($.where_clause))),
       $.declaration_block,
     ),
 
@@ -217,18 +245,40 @@ module.exports = grammar({
       optional($.type_parameters),
       field("type", $._type),
       optional(seq("for", field("for_type", $._type))),
+      optional(seq("where", commaSep1($.where_clause))),
       $.declaration_block,
     ),
 
     declaration_block: $ => seq(
       "{",
-      repeat($._item),
+      repeat(choice($._item, $.associated_type_item, $.associated_const_item)),
       "}",
+    ),
+
+    associated_type_item: $ => seq(
+      repeat($.attribute_item),
+      optional("pub"),
+      "type",
+      field("name", $.identifier),
+      optional(seq(":", $._type, repeat(seq("+", $._type)))),
+      optional(seq("=", $._type)),
+      optional(";"),
+    ),
+
+    associated_const_item: $ => seq(
+      repeat($.attribute_item),
+      optional("pub"),
+      "const",
+      field("name", $.identifier),
+      ":",
+      field("type", $._type),
+      optional(seq("=", field("value", $._expression))),
+      optional(";"),
     ),
 
     function_item: $ => prec.right(seq(
       optional("pub"),
-      optional("async"),
+      optional("comptime"),
       optional("unsafe"),
       "fn",
       field("name", $.identifier),
@@ -236,11 +286,7 @@ module.exports = grammar({
       field("parameters", $.parameters),
       optional(seq("->", field("return_type", $._type))),
       optional(seq("where", commaSep1($.where_clause))),
-      // Trait method signatures carry neither a body nor a `;`.
-      optional(choice(
-        $.block,
-        ";",
-      )),
+      optional(choice($.block, ";")),
     )),
 
     where_clause: $ => seq(
@@ -253,9 +299,11 @@ module.exports = grammar({
     type_parameters: $ => seq(
       "<",
       commaSep1(choice(
-        $.identifier,
+        seq("const", $.identifier, ":", $._type, optional(seq("=", $.literal))),
         seq($.identifier, ":", $._type, repeat(seq("+", $._type))),
         seq($.identifier, "=", $._type),
+        $.label,
+        $.identifier,
       )),
       ">",
     ),
@@ -270,6 +318,7 @@ module.exports = grammar({
     ),
 
     parameter: $ => seq(
+      optional("comptime"),
       field("pattern", $._pattern),
       ":",
       field("type", $._type),
@@ -283,20 +332,19 @@ module.exports = grammar({
     ),
 
     _statement: $ => choice(
-      prec.right(seq($._expression, optional(";"))),
       $.let_declaration,
       $.arena_block,
       $._item,
+      prec.right(seq($._expression, optional(";"))),
       ";",
     ),
 
-    // `arena` is a contextual keyword: statement-position `arena { ... }`
-    // frees everything allocated inside the block when it exits.
+    // `arena` is contextual: statement-position `arena { ... }` frees
+    // allocations made inside the block when it exits.
     arena_block: $ => seq("arena", $.block),
 
     let_declaration: $ => prec.right(seq(
       "let",
-      optional("mut"),
       field("pattern", $._pattern),
       optional(seq(":", field("type", $._type))),
       optional(seq("=", field("value", $._expression))),
@@ -307,6 +355,7 @@ module.exports = grammar({
     _pattern: $ => choice(
       $.literal,
       $.tuple_pattern,
+      $.slice_pattern,
       $.struct_pattern,
       $.tuple_struct_pattern,
       $.reference_pattern,
@@ -318,10 +367,16 @@ module.exports = grammar({
       $._path,
     ),
 
-    // prec -1: `&mut x` is a mutable reference pattern, not `&(mut x)`.
+    // Prec -1: `&mut x` is a mutable reference pattern, not `&(mut x)`.
     mut_pattern: $ => prec(-1, seq("mut", $.identifier)),
 
     tuple_pattern: $ => seq("(", commaSep(choice($._pattern, "..")), ")"),
+
+    slice_pattern: $ => seq(
+      "[",
+      commaSep(choice($._pattern, seq("..", optional($._pattern)))),
+      "]",
+    ),
 
     tuple_struct_pattern: $ => seq(
       $._path,
@@ -342,7 +397,11 @@ module.exports = grammar({
 
     reference_pattern: $ => prec(1, seq("&", optional("mut"), $._pattern)),
 
-    range_pattern: $ => prec(1, seq($.literal, choice("..", "..="), $.literal)),
+    range_pattern: $ => prec.right(1, choice(
+      seq($.literal, choice("..", "..="), $.literal),
+      seq($.literal, ".."),
+      seq(choice("..", "..="), optional("-"), $.literal),
+    )),
 
     or_pattern: $ => prec.left(seq($._pattern, "|", $._pattern)),
 
@@ -355,20 +414,20 @@ module.exports = grammar({
       $.tuple_type,
       $.array_type,
       $.function_type,
-      $.type_identifier,
       $._path,
-      seq("dyn", $._type),
+      $.type_identifier,
+      "!",
+      "_",
     ),
 
     primitive_type: _ => choice(...primitive_types),
 
     type_identifier: _ => /[\p{Lu}][\p{XID_Continue}]*/,
 
-    // prec 1: after `x as Foo`, a following `<` opens generic arguments.
     generic_type: $ => prec(1, seq(
       choice($.type_identifier, $._path),
       "<",
-      commaSep1($._type),
+      commaSep1($._generic_arg),
       ">",
     )),
 
@@ -383,9 +442,6 @@ module.exports = grammar({
       "]",
     ),
 
-    // The type_identifier head covers the `Fn` / `FnMut` / `FnOnce`
-    // closure traits; no other type spelling puts `(` after a name.
-    // prec 1: after `x as Foo`, a following `(` opens parameter types.
     function_type: $ => prec(1, seq(
       choice("fn", $.type_identifier),
       "(",
@@ -393,6 +449,8 @@ module.exports = grammar({
       ")",
       optional(seq("->", $._type)),
     )),
+
+    _generic_arg: $ => choice($._type, $.integer_literal, $.float_literal, $.boolean_literal),
 
     _expression: $ => choice(
       $.literal,
@@ -426,6 +484,10 @@ module.exports = grammar({
       $.defer_expression,
       $.select_expression,
       $.closure_expression,
+      $.unsafe_expression,
+      $.comptime_expression,
+      $.labelled_loop_expression,
+      $.reserved_keyword,
       $.parenthesized_expression,
       $.block,
     ),
@@ -437,37 +499,39 @@ module.exports = grammar({
       $.float_literal,
       $.string_literal,
       $.raw_string_literal,
+      $.raw_byte_string_literal,
       $.byte_string_literal,
+      $.byte_literal,
       $.char_literal,
       $.boolean_literal,
     ),
 
     integer_literal: _ => token(seq(
       choice(
-        /[0-9][0-9_]*/,
         /0x[0-9a-fA-F_]+/,
         /0b[01_]+/,
         /0o[0-7_]+/,
+        /[0-9][0-9_]*/,
       ),
-      optional(choice(...integer_types, ...float_types)),
+      optional(choice(...integer_types)),
     )),
 
     float_literal: _ => token(seq(
-      /[0-9][0-9_]*\.[0-9_]+([eE][+-]?[0-9_]+)?/,
+      choice(
+        /[0-9][0-9_]*\.[0-9_]+([eE][+-]?[0-9_]+)?/,
+        /[0-9][0-9_]*[eE][+-]?[0-9_]+/,
+        /\.[0-9_]+([eE][+-]?[0-9_]+)?/,
+      ),
       optional(choice(...float_types)),
     )),
 
-    string_literal: $ => seq(
+    string_literal: _ => token(seq(
       '"',
-      repeat(choice(
-        $._string_content,
-        $.escape_sequence,
-      )),
+      repeat(choice(/[^"\\]/, /\\([nrt0\\"']|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]+\})/)),
       '"',
-    ),
+    )),
 
     raw_string_literal: _ => token(seq(
-      optional("b"),
       "r",
       /#*/,
       '"',
@@ -476,39 +540,48 @@ module.exports = grammar({
       /#*/,
     )),
 
-    byte_string_literal: $ => seq(
-      'b"',
-      repeat(choice(
-        $._string_content,
-        $.escape_sequence,
-      )),
+    raw_byte_string_literal: _ => token(seq(
+      "br",
+      /#*/,
       '"',
-    ),
+      /[^"]*/,
+      '"',
+      /#*/,
+    )),
+
+    byte_string_literal: _ => token(seq(
+      'b"',
+      repeat(choice(/[^"\\]/, /\\([nrt0\\"']|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]+\})/)),
+      '"',
+    )),
 
     _string_content: _ => /[^"\\]+/,
 
     escape_sequence: _ => token(seq(
       "\\",
-      choice(
-        /[nrt0\\"']/,
-        /x[0-9a-fA-F]{2}/,
-        /u\{[0-9a-fA-F]+\}/,
-      ),
+      choice(/[nrt0\\"']/, /x[0-9a-fA-F]{2}/, /u\{[0-9a-fA-F]+\}/),
+    )),
+
+    byte_literal: _ => token(seq(
+      "b",
+      "'",
+      choice(/[^'\\]/, seq("\\", choice(/[nrt0\\"']/, /x[0-9a-fA-F]{2}/, /u\{[0-9a-fA-F]+\}/))),
+      "'",
     )),
 
     char_literal: _ => token(seq(
-      optional("b"),
       "'",
-      choice(
-        /[^'\\]/,
-        seq("\\", choice(/[nrt0\\"']/, /x[0-9a-fA-F]{2}/, /u\{[0-9a-fA-F]+\}/)),
-      ),
+      choice(/[^'\\]/, seq("\\", choice(/[nrt0\\"']/, /x[0-9a-fA-F]{2}/, /u\{[0-9a-fA-F]+\}/))),
       "'",
     )),
 
     boolean_literal: _ => choice("true", "false"),
 
-    // Unicode identifiers per UAX #31 (`let café = 1` parses).
+    label: _ => token(seq("'", /[_\p{XID_Start}][\p{XID_Continue}]*/)),
+
+    reserved_keyword: _ => choice("async", "await", "dyn", "package", "yield"),
+
+    // Unicode identifiers per UAX #31 (`let cafe = 1` and `let café = 1` parse).
     identifier: _ => /[_\p{XID_Start}][\p{XID_Continue}]*/,
 
     unary_expression: $ => prec(PREC.unary, choice(
@@ -541,11 +614,7 @@ module.exports = grammar({
       ));
     },
 
-    pipe_expression: $ => prec.left(PREC.pipe, seq(
-      $._expression,
-      "|>",
-      $._expression,
-    )),
+    pipe_expression: $ => prec.left(PREC.pipe, seq($._expression, "|>", $._expression)),
 
     assignment_expression: $ => prec.right(PREC.assign, seq(
       $._expression,
@@ -553,27 +622,31 @@ module.exports = grammar({
       $._expression,
     )),
 
-    range_expression: $ => prec.left(PREC.assign, choice(
-      seq($._expression, choice("..", "..="), $._expression),
-      seq($._expression, ".."),
-      seq("..", $._expression),
-      "..",
+    range_expression: $ => prec.left(PREC.range, choice(
+      seq($._expression, choice("..", "..="), optional($._expression)),
+      seq(choice("..", "..="), optional($._expression)),
     )),
 
     call_expression: $ => prec(PREC.postfix, seq(
-      field("function", $._expression),
-      field("arguments", seq("(", commaSep($._expression), ")")),
+      field("function", choice(
+        $._path,
+        $.field_expression,
+        $.method_call_expression,
+        $.generic_function,
+        $.parenthesized_expression,
+      )),
+      field("arguments", seq("(", commaSep(choice($._expression, $.spread_argument)), ")")),
     )),
 
-    // Turbofish call target: `from_json::<User>(&text)`.
+    spread_argument: _ => "...",
+
     generic_function: $ => prec(1, seq(
       field("function", $._path),
       "::<",
-      commaSep1($._type),
+      commaSep1($._generic_arg),
       ">",
     )),
 
-    // Six paren-shaped format macros plus `vec![...]` / `vec![v; n]`.
     macro_invocation: $ => seq(
       field("macro", $.identifier),
       token.immediate("!"),
@@ -586,36 +659,38 @@ module.exports = grammar({
       ),
     ),
 
-    cast_expression: $ => prec.left(PREC.cast, seq(
-      $._expression,
-      "as",
-      field("type", $._type),
-    )),
+    cast_expression: $ => prec.left(PREC.cast, seq($._expression, "as", field("type", $._type))),
 
     try_expression: $ => prec(PREC.postfix, seq($._expression, "?")),
 
     field_expression: $ => prec(PREC.postfix, seq(
       $._expression,
       ".",
-      choice($.identifier, /[0-9]+/),
+      choice($.identifier, "await", /[0-9]+/),
     )),
 
     method_call_expression: $ => prec(14, seq(
       $._expression,
       ".",
-      $.identifier,
-      optional(seq("::<", commaSep1($._type), ">")),
+      choice($.identifier, "await"),
+      optional(seq("::<", commaSep1($._generic_arg), ">")),
       "(",
-      commaSep($._expression),
+      commaSep(choice($._expression, $.spread_argument)),
       ")",
     )),
 
-    index_expression: $ => prec(PREC.postfix, seq(
-      $._expression,
-      "[",
-      $._expression,
-      "]",
-    )),
+    index_expression: $ => prec(PREC.postfix, seq($._index_receiver, "[", $._expression, "]")),
+
+    _index_receiver: $ => choice(
+      $._path,
+      $.call_expression,
+      $.try_expression,
+      $.field_expression,
+      $.method_call_expression,
+      $.index_expression,
+      $.array_expression,
+      $.parenthesized_expression,
+    ),
 
     tuple_expression: $ => choice(
       seq("(", ")"),
@@ -636,38 +711,68 @@ module.exports = grammar({
       "{",
       commaSep(choice(
         seq($.identifier, ":", $._expression),
-        $.identifier,
-        seq("..", $._expression),
+        $.struct_spread_field,
+        $._expression,
       )),
       "}",
     ),
 
-    // prec.right: an `else` after `let x = if c { .. }` binds to the `if`,
-    // not to a let-else.
+    struct_spread_field: $ => prec(2, seq("..", $._expression)),
+
     if_expression: $ => prec.right(seq(
       "if",
-      field("condition", choice($._expression, $.let_condition)),
+      field("condition", choice($.let_chain_condition, $.let_condition, $._expression)),
       field("consequence", $.block),
       optional(seq("else", choice($.block, $.if_expression))),
     )),
 
-    // `if let PAT = expr { ... }` / `while let PAT = expr { ... }`.
     let_condition: $ => seq(
       "let",
       field("pattern", $._pattern),
       "=",
-      field("value", $._expression),
+      field("value", $._condition_operand),
+    ),
+
+    _condition_operand: $ => prec(2, choice(
+      $.literal,
+      $._path,
+      $.call_expression,
+      $.generic_function,
+      $.macro_invocation,
+      $.try_expression,
+      $.field_expression,
+      $.method_call_expression,
+      $.index_expression,
+      $.reference_expression,
+      $.tuple_expression,
+      $.array_expression,
+      $.parenthesized_expression,
+    )),
+
+    let_chain_condition: $ => choice(
+      seq(
+        $.let_condition,
+        repeat1(seq("&&", choice($.let_condition, $._expression))),
+      ),
+      seq(
+        $._expression,
+        "&&",
+        $.let_condition,
+        repeat(seq("&&", choice($.let_condition, $._expression))),
+      ),
     ),
 
     match_expression: $ => seq(
       "match",
-      field("scrutinee", $._expression),
+      field("scrutinee", $._match_scrutinee),
       "{",
       repeat($.match_arm),
       "}",
     ),
 
-    // The comma after an arm is optional (newline-terminated arms parse).
+    _match_scrutinee: $ => choice($._condition_operand, $.binary_expression, $.pipe_expression),
+
+    // The comma after an arm is optional; newline-terminated arms parse.
     match_arm: $ => seq(
       $._pattern,
       optional(seq("if", $._expression)),
@@ -680,7 +785,7 @@ module.exports = grammar({
 
     while_expression: $ => seq(
       "while",
-      field("condition", choice($._expression, $.let_condition)),
+      field("condition", choice($.let_chain_condition, $.let_condition, $._expression)),
       $.block,
     ),
 
@@ -692,34 +797,39 @@ module.exports = grammar({
       $.block,
     ),
 
+    labelled_loop_expression: $ => seq(
+      $.label,
+      ":",
+      choice($.loop_expression, $.while_expression, $.for_expression),
+    ),
+
     return_expression: $ => prec.right(seq("return", optional($._expression))),
 
-    break_expression: $ => prec.right(seq("break", optional($._expression))),
+    break_expression: $ => prec.right(seq("break", optional($.label), optional($._expression))),
 
-    continue_expression: _ => "continue",
+    continue_expression: $ => prec.right(seq("continue", optional($.label))),
 
     go_expression: $ => prec.right(seq("go", $._expression)),
 
     defer_expression: $ => prec.right(seq("defer", $._expression)),
 
-    select_expression: $ => seq(
-      "select",
-      "{",
-      commaSep($.select_arm),
-      "}",
-    ),
+    unsafe_expression: $ => seq("unsafe", $.block),
+
+    comptime_expression: $ => seq("comptime", $.block),
+
+    select_expression: $ => seq("select", "{", commaSep($.select_arm), "}"),
 
     select_arm: $ => seq(
       choice(
         seq($._pattern, "=", $._expression),
+        "default",
+        "else",
         $._expression,
       ),
       "=>",
       $._expression,
     ),
 
-    // `|x: i64| body` (capturing lambda) or `fn(x: i64) { ... }`.
-    // Gossamer has no `move` qualifier.
     closure_expression: $ => choice(
       prec.right(PREC.closure, seq(
         field("parameters", $.closure_parameters),
@@ -739,7 +849,7 @@ module.exports = grammar({
       seq("|", commaSep($.closure_parameter), "|"),
     ),
 
-    // Or-patterns are excluded: a bare `|` always closes the parameter list.
+    // Or-patterns are excluded: a bare `|` closes the parameter list.
     closure_parameter: $ => seq(
       field("pattern", choice(
         $.tuple_pattern,

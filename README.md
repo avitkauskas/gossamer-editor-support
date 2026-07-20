@@ -18,16 +18,20 @@ editor supports it) tree-sitter queries.
 | **Sublime Text**           | `sublime/`                 | `.sublime-syntax`     |
 | **Zed**                    | `zed/`                     | extension + grammar   |
 
-All integrations track the Gossamer 0.12.0 surface and cover at
+All integrations track the Gossamer 0.32.0 surface and cover at
 minimum:
 
 - `.gos` file detection
 - Comments (`//` and nesting `/* ... */`)
-- Keywords — including the contextual `arena { }` block (0.12.0)
+- Keywords, including `comptime`, goroutine controls, and the
+  contextual `arena { }` block
 - Primitive types and common stdlib types
 - Numeric literals (decimal, hex, binary, octal) with type suffixes
-- String, byte-string, raw-string, and char literals
+- String, byte-string, raw-string, raw-byte-string, char, and byte literals
 - The forward-pipe operator `|>`
+- Labels, open ranges, range patterns, and slice patterns
+- Braced named-struct literals with keyed, positional, mixed, and
+  `..base` fields
 - Attributes (`#[...]`, `#![...]`)
 - Function-call detection (identifier-before-paren)
 
@@ -35,7 +39,7 @@ LSP wiring is configured for VSCode, Helix, Neovim, Zed, Emacs, and
 Sublime Text. Each client launches `gos lsp` (the LSP subcommand of
 the Gossamer CLI). If `gos` is not on `PATH` the LSP client fails to
 start and syntax highlighting still works. Vim has no first-party
-LSP — use a plugin (`yegappan/lsp`, ALE, coc.nvim) and point it at
+LSP, use a plugin (`yegappan/lsp`, ALE, coc.nvim) and point it at
 `gos lsp`.
 
 ## Install

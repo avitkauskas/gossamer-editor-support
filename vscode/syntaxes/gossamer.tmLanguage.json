@@ -107,7 +107,7 @@
         },
         {
           "name": "keyword.other.gossamer",
-          "match": "\\b(as|async|await|const|crate|dyn|enum|extern|fn|impl|let|mod|mut|package|pub|self|Self|static|struct|super|trait|type|unsafe|use|where)\\b"
+          "match": "\\b(as|async|await|comptime|const|crate|dyn|enum|extern|fn|impl|let|mod|mut|package|pub|self|Self|static|struct|super|trait|type|unsafe|use|where|yield)\\b"
         },
         {
           "name": "entity.name.function.macro.gossamer",
@@ -151,11 +151,11 @@
       "patterns": [
         {
           "name": "keyword.operator.gossamer",
-          "match": "(==|!=|<=|>=|&&|\\|\\||<<|>>|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|->|=>|\\.\\.=|\\.\\.|::)"
+          "match": "(==|!=|<=|>=|&&|\\|\\||<<=|>>=|<<|>>|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|->|=>|\\.\\.\\.|\\.\\.=|\\.\\.|::)"
         },
         {
           "name": "keyword.operator.gossamer",
-          "match": "[+\\-*/%<>!~|&^?.=]"
+          "match": "[+\\-*/%<>!~|&^?.=@]"
         }
       ]
     },
