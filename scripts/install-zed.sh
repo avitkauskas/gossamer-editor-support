@@ -20,6 +20,11 @@ if [ ! -d "$ROOT/.git" ]; then
     echo "warning: $ROOT is not a git repo; Zed may fail to clone the file:// grammar source" >&2
 fi
 
+GIT_BRANCH="HEAD"
+if [ -d "$ROOT/.git" ]; then
+    GIT_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+fi
+
 if [ ! -f "$ROOT/tree-sitter-gossamer/src/parser.c" ]; then
     if ! command -v tree-sitter >/dev/null 2>&1; then
         echo "tree-sitter CLI not found and tree-sitter-gossamer/src/parser.c is missing." >&2
@@ -40,7 +45,7 @@ cp -a "$SRC_DIR"/. "$STAGE_DIR"/
 sed -i.bak \
     "/^\[grammars\.gossamer\]/,/^\[/{
         s|^repository = .*|repository = \"file://$ROOT\"|
-        s|^commit = .*|commit = \"HEAD\"|
+        s|^commit = .*|commit = \"$GIT_BRANCH\"|
         s|^path = .*|path = \"tree-sitter-gossamer\"|
     }" \
     "$STAGE_DIR/extension.toml"
