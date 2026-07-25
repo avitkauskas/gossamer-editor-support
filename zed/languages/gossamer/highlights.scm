@@ -21,19 +21,37 @@
 (primitive_type) @type
 (type_identifier) @type
 
+(identifier) @variable
+
+(field_declaration name: (identifier) @property)
+(parameter pattern: (identifier) @variable.parameter)
+(closure_parameter pattern: (identifier) @variable.parameter)
+
 (function_item name: (identifier) @function)
 (call_expression function: (identifier) @function)
 (generic_function function: (identifier) @function)
 (method_call_expression (identifier) @function.method)
 (macro_invocation macro: (identifier) @function.special)
 
-(field_declaration name: (identifier) @property)
-(parameter pattern: (identifier) @variable.parameter)
-(closure_parameter pattern: (identifier) @variable.parameter)
+[
+  "+" "-" "*" "/" "%"
+  "|" "^" "!"
+  "<" ">" "=" "==" "!=" "<=" ">="
+  "&&" "||"
+  "<<" ">>"
+  "->" "=>"
+  "+=" "-=" "*=" "/=" "%=" "&=" "|=" "^=" "<<=" ">>="
+  ".." "..="
+  "::" "::<"
+  "@" "?" "|>"
+] @operator
 
-(identifier) @variable
+(reference_type "&" @keyword)
+(reference_pattern "&" @keyword)
+(reference_expression "&" @keyword)
+(binary_expression "&" @operator)
 
-"|>" @operator
+(spread_argument) @operator
 
 ; Only tokens the grammar actually defines may appear here; an unknown
 ; token makes the whole query fail to load.
